@@ -28,6 +28,7 @@ FOR insert,update
 AS
 if update(TRUONGBM)
 BEGIN
+
 	IF exists(SELECT * FROM inserted AS INS JOIN GIAOVIEN as GV ON GV.MAGV = INS.TRUONGBM WHERE YEAR(GV.NGSINH) <= 1975)
 	BEGIN
 		raiserror(N'Lỗi Trưởng bộ môn phải sinh sau năm 1975',16,1)
@@ -151,9 +152,80 @@ BEGIN
 	END
 END
 
+
 GO
 
-(SELECT BM.MABM, COUNT(DEL.MAGV) FROM BOMON AS BM JOIN GIAOVIEN as DEL ON DEL.MABM = BM.MABM WHERE DEL.PHAI = N'Nữ' GROUP BY BM.MABM having count(DEL.MAGV) = 0)
+CREATE TRIGGER t_number_BOMON_DEL
+ON GIAOVIEN
+FOR delete
+AS
+BEGIN
+	IF ((SELECT COUNT(*) FROM (GIAOVIEN AS GV JOIN BOMON AS BM ON BM.MABM = GV.MABM),deleted WHERE BM.MABM = deleted.MABM GROUP BY BM.MABM) <4)
+	BEGIN
+		raiserror(N'Lỗi: mỗi bộ môn phải có ít nhất 4 thành viên',16,1)
+		rollback
+	END
+END
 
+GO
+
+--T7. Trưởng bộ môn phải là người lớn tuổi nhất trong bộ môn.
+CREATE TRIGGER t_TRUONG_BO_MON_ELDEST
+ON BOMON
+FOR insert,update
+AS
+if UPDATE(TRUONGBM)
+BEGIN
+	IF exists(SELECT * FROM inserted AS I JOIN GIAOVIEN AS GV ON GV.MABM = I.MABM WHERE GV.NGSINH > (SELECT MIN(YEAR(GV.NGSINH)) FROM (GIAOVIEN AS GV JOIN BOMON AS BM ON BM.MABM = GV.MABM),inserted WHERE inserted.MABM = BM.MABM GROUP BY BM.MABM)
+)
+	BEGIN
+		raiserror(N'Lỗi:trưởng bộ môn phải là người lớn tuổi nhất trong bộ môn của họ',16,1)
+		rollback
+	END
+END
+
+GO
+
+
+--T8. Nếu một giáo viên đã là trưởng bộ môn thì giáo viên đó không làm người quản lý chuyên môn.
+
+CREATE TRIGGER t_TRUONG_BO_MON_not_QLCM
+ON BOMON
+FOR insert,update
+AS
+if UPDATE(TRUONGBM)
+BEGIN
+	IF exists(SELECT * FROM inserted AS I join GIAOVIEN AS GV ON I.TRUONGBM = GV.MAGV WHERE GV.MAGV IN (SELECT GV2.MAGV FROM GIAOVIEN AS GV1 JOIN GIAOVIEN AS GV2 ON GV1.GVQLCM = GV2.MAGV))
+	BEGIN
+		raiserror(N'Lỗi:trưởng bộ môn KHÔNG thể làm quản lý chuyên môn',16,1)
+		rollback
+	END
+END
+
+GO
+
+--T9. Giáo viên và giáo viên quản lý chuyên môn của giáo viên đó phải thuộc về 1 bộ môn.
+
+CREATE TRIGGER t_QLCM_SAME_BM
+ON GIAOVIEN
+FOR insert,update
+AS
+if UPDATE(GVQLCM)
+BEGIN
+	IF exists(SELECT * FROM inserted AS I WHERE I.MABM != (SELECT I2.MABM FROM inserted AS I2 WHERE I.GVQLCM = I2.MAGV ))
+	BEGIN
+		raiserror(N'Lỗi: giáo viên và giáo viên quản lý chuyên môn phải cùng bộ môn',16,1)
+		rollback
+	END
+END
+
+GO
+
+--T10.Mỗi giáo viên chỉ có tối đa 1 vợ chồng
+
+(SELECT * FROM BOMON AS BM JOIN GIAOVIEN as DEL ON DEL.MABM = BM.MABM WHERE YEAR(DEL.NGSINH) = (SELECT MAX(YEAR(GV.NGSINH) FROM GIAOVIEN AS GV))
+
+
+SELECT MIN(YEAR(GV.NGSINH)) FROM GIAOVIEN AS GV JOIN BOMON AS BM ON BM.MABM = GV.MABM GROUP BY BM.MABM
 
 
