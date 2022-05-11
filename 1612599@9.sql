@@ -221,11 +221,48 @@ END
 
 GO
 
---T10.Mỗi giáo viên chỉ có tối đa 1 vợ chồng
+--T13.Một giáo viên chỉ làm chủ nhiệm tối đa 3 đề tài.
+CREATE TRIGGER t_MAX_DTCN
+ON DETAI
+FOR insert,update
+AS
+if UPDATE(GVCNDT)
+BEGIN
+	IF(SELECT  COUNT(*) FROM DETAI AS DT,inserted AS I WHERE I.GVCNDT = DT.GVCNDT GROUP BY DT.GVCNDT) >3
+	BEGIN
+		raiserror(N'Lỗi: giáo viên chỉ được chủ nhiệm tối đa 3 đề tài',16,1)
+		rollback
+	END
+END
 
-(SELECT * FROM BOMON AS BM JOIN GIAOVIEN as DEL ON DEL.MABM = BM.MABM WHERE YEAR(DEL.NGSINH) = (SELECT MAX(YEAR(GV.NGSINH) FROM GIAOVIEN AS GV))
+GO
 
 
-SELECT MIN(YEAR(GV.NGSINH)) FROM GIAOVIEN AS GV JOIN BOMON AS BM ON BM.MABM = GV.MABM GROUP BY BM.MABM
+--T14.Một đề tài phải có ít nhất một công việc
+CREATE TRIGGER t_MIN_CONG_VIEC
+ON CONGVIEC
+FOR DELETE,update
+AS
+BEGIN
+	IF EXISTS(SELECT * FROM deleted AS I JOIN DETAI AS DT ON I.MADT = DT.MADT WHERE DT.MADT NOT IN (SELECT CV1.MADT FROM CONGVIEC AS CV1))
+	BEGIN
+		raiserror(N'Lỗi: một đề tài phải có ít nhất một công việc',16,1)
+		rollback
+	END
+END
 
+GO
 
+--T15.Lương của giáo viên phải nhỏ hơn lương người quản lý của giáo viên đó.
+CREATE TRIGGER t_QUAN_HE_SEP_NHAN_VIEN_LUONG
+ON GIAOVIEN
+FOR INSERT,UPDATE
+AS
+IF UPDATE(LUONG)
+BEGIN
+	IF (EXISTS(SELECT I.LUONG FROM inserted AS I WHERE I.LUONG > (SELECT SEP.LUONG FROM GIAOVIEN AS SEP WHERE I.GVQLCM = SEP.MAGV)))
+	BEGIN
+		raiserror(N'Lỗi: Lương của giáo viên không được lớn hơn lương của giáo viên quản lý họ',16,1)
+		rollback
+	END
+END
